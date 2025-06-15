@@ -42,12 +42,26 @@ public class Win32 {
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
     [DllImport("user32.dll")]
-    public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
+    public static extern bool GetClientRect(IntPtr hwnd, out RECT lpRect);
+    [DllImport("user32.dll")]
+    public static extern bool ClientToScreen(IntPtr hwnd, ref POINT lpPoint);
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hwnd, int nCmdShow);
 }
 public struct RECT {
     public int Left; public int Top; public int Right; public int Bottom;
 }
+public struct POINT {
+    public int X; public int Y;
+}
 "@
+
+# Bring window to foreground and ensure it's visible
+[Win32]::ShowWindow($hwnd, 9) # SW_RESTORE
+[Win32]::SetForegroundWindow($hwnd)
+Start-Sleep -Milliseconds 200  # Give time for window to come to front
 
 $rect = New-Object RECT
 [Win32]::GetWindowRect($hwnd, [ref]$rect)
@@ -58,15 +72,25 @@ if ($width -le 0 -or $height -le 0) {
     throw "Invalid window dimensions: $width x $height"
 }
 
-# Create bitmap and capture window
-$bitmap = New-Object System.Drawing.Bitmap($width, $height)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$hdc = $graphics.GetHdc()
-[Win32]::PrintWindow($hwnd, $hdc, 0)
-$graphics.ReleaseHdc($hdc)
-$bitmap.Save('${safePath}')
-$graphics.Dispose()
-$bitmap.Dispose()
+# Use screen capture from window position instead of PrintWindow for GPU content
+$screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+$screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+$screenBitmap = New-Object System.Drawing.Bitmap($screenWidth, $screenHeight)
+$screenGraphics = [System.Drawing.Graphics]::FromImage($screenBitmap)
+$screenGraphics.CopyFromScreen(0, 0, 0, 0, $screenBitmap.Size)
+
+# Crop to window area
+$windowBitmap = New-Object System.Drawing.Bitmap($width, $height)
+$windowGraphics = [System.Drawing.Graphics]::FromImage($windowBitmap)
+$sourceRect = New-Object System.Drawing.Rectangle($rect.Left, $rect.Top, $width, $height)
+$destRect = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
+$windowGraphics.DrawImage($screenBitmap, $destRect, $sourceRect, [System.Drawing.GraphicsUnit]::Pixel)
+
+$windowBitmap.Save('${safePath}')
+$windowGraphics.Dispose()
+$windowBitmap.Dispose()
+$screenGraphics.Dispose()
+$screenBitmap.Dispose()
 Write-Output 'SUCCESS'
 `;
   },
