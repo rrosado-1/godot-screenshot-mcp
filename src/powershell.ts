@@ -71,25 +71,14 @@ if ($width -le 0 -or $height -le 0) {
     throw "Invalid window dimensions: $width x $height"
 }
 
-# Use screen capture from window position instead of PrintWindow for GPU content
-$screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
-$screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
-$screenBitmap = New-Object System.Drawing.Bitmap($screenWidth, $screenHeight)
-$screenGraphics = [System.Drawing.Graphics]::FromImage($screenBitmap)
-$screenGraphics.CopyFromScreen(0, 0, 0, 0, $screenBitmap.Size)
-
-# Crop to window area
+# Capture directly from window coordinates (works across multiple monitors)
 $windowBitmap = New-Object System.Drawing.Bitmap($width, $height)
 $windowGraphics = [System.Drawing.Graphics]::FromImage($windowBitmap)
-$sourceRect = New-Object System.Drawing.Rectangle($rect.Left, $rect.Top, $width, $height)
-$destRect = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
-$windowGraphics.DrawImage($screenBitmap, $destRect, $sourceRect, [System.Drawing.GraphicsUnit]::Pixel)
+$windowGraphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $windowBitmap.Size)
 
 $windowBitmap.Save('${safePath}')
 $windowGraphics.Dispose()
 $windowBitmap.Dispose()
-$screenGraphics.Dispose()
-$screenBitmap.Dispose()
 Write-Output 'SUCCESS'
 `;
   },
