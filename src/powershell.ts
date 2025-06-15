@@ -58,10 +58,9 @@ public struct POINT {
 }
 "@
 
-# Bring window to foreground and ensure it's visible
-[Win32]::ShowWindow($hwnd, 9) # SW_RESTORE
+# Gently bring window to foreground without changing its current state
 [Win32]::SetForegroundWindow($hwnd)
-Start-Sleep -Milliseconds 200  # Give time for window to come to front
+Start-Sleep -Milliseconds 50  # Brief pause for focus change
 
 $rect = New-Object RECT
 [Win32]::GetWindowRect($hwnd, [ref]$rect)
