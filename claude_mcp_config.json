@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "godot-screenshot": {
+      "command": "node",
+      "args": ["/path/to/godot-screenshot-mcp/dist/index.js"]
+    }
+  }
+}
