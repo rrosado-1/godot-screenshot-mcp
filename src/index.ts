@@ -35,19 +35,32 @@ const server = new Server(
   }
 );
 
-// Tool schemas
+// Input validation schemas
 const CaptureGodotDebugSchema = z.object({
-  projectName: z.string().optional().describe('Project name to filter specific debug window'),
+  projectName: z.string().min(1).max(200).optional().describe('Project name to filter specific debug window'),
 });
 
 const CaptureGodotEditorSchema = z.object({
-  projectName: z.string().optional().describe('Project name to filter specific editor window'),
+  projectName: z.string().min(1).max(200).optional().describe('Project name to filter specific editor window'),
 });
 
 const CaptureWindowByTitleSchema = z.object({
-  title: z.string().describe('Exact window title to capture'),
+  title: z.string().min(1).max(500).describe('Exact window title to capture'),
   exact: z.boolean().optional().default(false).describe('Whether to match title exactly'),
 });
+
+// Input validation helper
+function validateInput<T>(schema: z.ZodSchema<T>, data: unknown): T {
+  try {
+    return schema.parse(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const issues = error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${issues}`);
+    }
+    throw new McpError(ErrorCode.InvalidParams, 'Invalid parameters');
+  }
+}
 
 
 // Register tool handlers
@@ -133,7 +146,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     switch (name) {
       case 'capture_godot_debug': {
-        const { projectName } = CaptureGodotDebugSchema.parse(args);
+        const { projectName } = validateInput(CaptureGodotDebugSchema, args);
         const debugWindows = await findGodotDebugWindows();
         
         if (debugWindows.length === 0) {
@@ -166,7 +179,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'capture_godot_editor': {
-        const { projectName } = CaptureGodotEditorSchema.parse(args);
+        const { projectName } = validateInput(CaptureGodotEditorSchema, args);
         const editorWindows = await findGodotEditorWindows();
         
         if (editorWindows.length === 0) {
@@ -199,7 +212,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'capture_window_by_title': {
-        const { title, exact } = CaptureWindowByTitleSchema.parse(args);
+        const { title, exact } = validateInput(CaptureWindowByTitleSchema, args);
         
         const window = await findWindowByTitle(title, exact);
         

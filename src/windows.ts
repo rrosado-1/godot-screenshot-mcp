@@ -1,7 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { LIST_WINDOWS_COMMAND } from './powershell.js';
-import { writeFile, unlink, appendFile } from 'fs/promises';
+import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { wslToWindowsPath, isWSL } from './screenshot.js';
@@ -50,14 +50,12 @@ export async function listWindows(pattern?: string): Promise<WindowInfo[]> {
     await writeFile(scriptPath, LIST_WINDOWS_COMMAND);
     const windowsScriptPath = isWSL() ? wslToWindowsPath(scriptPath) : scriptPath;
     const command = `powershell.exe -ExecutionPolicy Bypass -File "${windowsScriptPath}"`;
-    const debugLog = `[${new Date().toISOString()}] CWD: ${process.cwd()}, ScriptPath: ${scriptPath}, WindowsPath: ${windowsScriptPath}, Command: ${command}\n`;
-    await appendFile('/tmp/mcp-debug.log', debugLog).catch(() => {});
+    // Debug logging disabled for security - contains sensitive paths
     const { stdout, stderr } = await execAsync(command, { timeout: 5000 });
     
     if (stderr) {
-      await appendFile('/tmp/mcp-debug.log', `[${new Date().toISOString()}] PowerShell stderr: ${stderr}\n`).catch(() => {});
+      console.error(`PowerShell stderr: ${stderr}`);
     }
-    await appendFile('/tmp/mcp-debug.log', `[${new Date().toISOString()}] PowerShell stdout: ${stdout}\n`).catch(() => {});
     
     const windows: WindowInfo[] = [];
     const lines = stdout.trim().split('\n');

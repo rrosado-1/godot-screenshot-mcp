@@ -57,6 +57,9 @@ const CONFIG = {
 };
 
 let windowsTempDir: string | null = null;
+let powerShellAccessCache: boolean | null = null;
+let powerShellAccessCheckTime = 0;
+const POWERSHELL_CACHE_TTL = 30000; // 30 seconds
 
 // WSL detection
 export function isWSL(): boolean {
@@ -86,10 +89,12 @@ async function throttleScreenshot(): Promise<void> {
   const timeSinceLastScreenshot = now - lastScreenshotTime;
   
   if (timeSinceLastScreenshot < SCREENSHOT_THROTTLE_MS) {
-    await new Promise(resolve => setTimeout(resolve, SCREENSHOT_THROTTLE_MS - timeSinceLastScreenshot));
+    const delay = SCREENSHOT_THROTTLE_MS - timeSinceLastScreenshot;
+    lastScreenshotTime = now + delay; // Reserve the slot to prevent race conditions
+    await new Promise(resolve => setTimeout(resolve, delay));
+  } else {
+    lastScreenshotTime = now;
   }
-  
-  lastScreenshotTime = Date.now();
 }
 
 export async function captureWindow(
@@ -139,7 +144,7 @@ export async function captureWindow(
     await unlink(tempPath).catch(() => {});
     
     return {
-      base64,
+      base64: `data:image/${format};base64,${base64}`,
       format
     };
   } catch (error) {
@@ -210,10 +215,21 @@ export async function captureScreen(options: ScreenshotOptions = {}): Promise<Sc
 }
 
 export async function checkPowerShellAccess(): Promise<boolean> {
+  const now = Date.now();
+  
+  // Return cached result if still valid
+  if (powerShellAccessCache !== null && (now - powerShellAccessCheckTime) < POWERSHELL_CACHE_TTL) {
+    return powerShellAccessCache;
+  }
+  
   try {
     const { stdout } = await execAsync('powershell.exe -Command "Write-Output \'OK\'"', { timeout: 2000 });
-    return stdout.trim() === 'OK';
+    powerShellAccessCache = stdout.trim() === 'OK';
+    powerShellAccessCheckTime = now;
+    return powerShellAccessCache;
   } catch {
+    powerShellAccessCache = false;
+    powerShellAccessCheckTime = now;
     return false;
   }
 }
