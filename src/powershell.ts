@@ -20,34 +20,37 @@ export const SCREENSHOT_COMMANDS = {
     const safeTitle = sanitizeWindowTitle(windowTitle);
     return `
 Add-Type -AssemblyName System.Drawing,System.Windows.Forms
-Add-Type -AssemblyName System.Runtime.InteropServices
 
-$signature = @'
-[DllImport("user32.dll")]
-public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-[DllImport("user32.dll")]
-public static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
-[DllImport("user32.dll")]
-public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, int nFlags);
-public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
-'@
-
-$User32 = Add-Type -MemberDefinition $signature -Name "User32" -Namespace Win32Functions -PassThru
-
-$hwnd = $User32::FindWindow($null, '${safeTitle}')
-if ($hwnd -eq [IntPtr]::Zero) { 
+# Find the target window process
+$targetProcess = Get-Process | Where-Object {$_.MainWindowTitle -eq '${safeTitle}'}
+if (-not $targetProcess) {
     # Try partial match if exact match fails
-    $processes = Get-Process | Where-Object {$_.MainWindowTitle -like "*${safeTitle}*"}
-    if ($processes.Count -gt 0) {
-        $hwnd = $processes[0].MainWindowHandle
-    }
-    if ($hwnd -eq [IntPtr]::Zero) { 
-        throw "Window not found: ${safeTitle}" 
-    }
+    $targetProcess = Get-Process | Where-Object {$_.MainWindowTitle -like "*${safeTitle}*"} | Select-Object -First 1
 }
 
-$rect = New-Object Win32Functions.User32+RECT
-$User32::GetWindowRect($hwnd, [ref]$rect)
+if (-not $targetProcess -or $targetProcess.MainWindowHandle -eq [IntPtr]::Zero) {
+    throw "Window not found: ${safeTitle}"
+}
+
+$hwnd = $targetProcess.MainWindowHandle
+
+# Get window bounds using Windows API
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
+    [DllImport("user32.dll")]
+    public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
+}
+public struct RECT {
+    public int Left; public int Top; public int Right; public int Bottom;
+}
+"@
+
+$rect = New-Object RECT
+[Win32]::GetWindowRect($hwnd, [ref]$rect)
 $width = $rect.Right - $rect.Left
 $height = $rect.Bottom - $rect.Top
 
@@ -55,10 +58,11 @@ if ($width -le 0 -or $height -le 0) {
     throw "Invalid window dimensions: $width x $height"
 }
 
-$bitmap = New-Object System.Drawing.Bitmap $width, $height
+# Create bitmap and capture window
+$bitmap = New-Object System.Drawing.Bitmap($width, $height)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 $hdc = $graphics.GetHdc()
-$User32::PrintWindow($hwnd, $hdc, 0)
+[Win32]::PrintWindow($hwnd, $hdc, 0)
 $graphics.ReleaseHdc($hdc)
 $bitmap.Save('${safePath}')
 $graphics.Dispose()
