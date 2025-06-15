@@ -144,7 +144,7 @@ export async function captureWindow(
     await unlink(tempPath).catch(() => {});
     
     return {
-      base64: `data:image/${format};base64,${base64}`,
+      base64,
       format
     };
   } catch (error) {
@@ -201,7 +201,7 @@ export async function captureScreen(options: ScreenshotOptions = {}): Promise<Sc
     await unlink(tempPath).catch(() => {});
     
     return {
-      base64: `data:image/${format};base64,${base64}`,
+      base64,
       format
     };
   } catch (error) {
